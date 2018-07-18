@@ -1,0 +1,5 @@
+#My configuration
+CNN_Promoter.h5
+CNN_Promoter/.idea/
+CNN_Promoter/split.py
+CNN_Promoter/venv/
