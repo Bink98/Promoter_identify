@@ -25,8 +25,11 @@ from sklearn.metrics import classification_report
 import matplotlib.pyplot as plt
 
 import time
-
-os.chdir(r"E:/Users/Bink/Documents/iGEM/panda")
+config = tf.ConfigProto()
+config.gpu_options.allow_growth = True
+session = tf.Session(config=config)
+# with tf.device('/cpu:0'):
+os.chdir(r"E:\Users\Bink\Documents\iGEM\panda\Promoter_identify")
 print(os.getcwd())
 
 oneHotDict = {'A': np.array([1, 0, 0, 0]), 'G': np.array([0, 1, 0, 0]), 'C': np.array([0, 0, 1, 0]),
@@ -46,44 +49,10 @@ def onehot_fasta_as_numpy(fname):
         allseq.append(one_hot_seq)
     return np.array(allseq)
 
-
-prom = onehot_fasta_as_numpy("Ecoli_prom_trim")
-nonprom = onehot_fasta_as_numpy("Ecoli_non_prom")
-print(prom.shape)
-print(nonprom.shape)
-# print(prom[:, :, :])
-
-y = np.array([1, 0])
-y = np.repeat(y, [prom.shape[0], nonprom.shape[0]])
-print(y.shape)
-print(y)
-y = to_categorical(y)
-# print(y.shape)
-# print(y)
-X = np.concatenate((prom, nonprom), axis = 0)
-# print(X.shape)
-indices = np.arange(X.shape[0])
-X_train, X_test, y_train, y_test, idx_train, idx_test = train_test_split(X, y, indices, test_size=0.2, random_state=15)
-# print(idx_train)
-# print(idx_train.shape)
-print(idx_test[:10])
-# print(idx_test.shape)
-
-# Set input shape specifications# Set in
-length = 81
-dimensions = 4
-
-nb_filters = 300
-kernel_size = 21
-
-pool_size = 61
-
-
 # Create function returning a compiled network
-def create_network():
+def create_network(nb_filters,kernel_size,length,dimensions,pool_size):
     # Initialize network
     classifier = Sequential()
-
     # Layers 1 and 2: Add two convolutional layers
     classifier.add(
         Conv1D(filters=nb_filters, kernel_size=kernel_size, input_shape=(length, dimensions), activation="relu"))
@@ -104,10 +73,7 @@ def create_network():
     # Return compiled network
     return classifier
 
-
-classifier = create_network()
-print(classifier)
-
+import matplotlib.pyplot as plt
 
 def plot_model_history(model_history):
     fig, axs = plt.subplots(1, 2, figsize=(15, 5))
@@ -134,42 +100,77 @@ def plot_model_history(model_history):
     plt.show()
 
 
-from keras.callbacks import EarlyStopping
-earlystop = EarlyStopping(monitor='val_acc', min_delta=0.0001, patience=5, \
-                          verbose=1, mode='auto')
+def train_network(prom, nonprom, nb_filters, kernel_size, length, pool_size, save_file='', plot=1):
+    prom = onehot_fasta_as_numpy("{0}".format(prom))
+    nonprom = onehot_fasta_as_numpy("{0}".format(nonprom))
+    y = np.array([1, 0])
+    y = np.repeat(y, [prom.shape[0], nonprom.shape[0]])
+    y = to_categorical(y)
+    X = np.concatenate((prom, nonprom), axis=0)
+    indices = np.arange(X.shape[0])
+    X_train, X_test, y_train, y_test, idx_train, idx_test = train_test_split(X, y, indices, test_size=0.2,
+                                                                             random_state=15)
+    # open("Model_score_l61f.txt", 'a')
+    # # for nb_filters in range(100, 201, 50):
+    # #     for kernel_size in range(3, 32, 2):
+    # # for pool_size in range(1, length-kernel_size+1, 2):
+    # pool_size = length - kernel_size + 1
+    classifier = create_network(nb_filters, kernel_size, length, 4, pool_size)
+    print(classifier)
+    from keras.callbacks import EarlyStopping
+    earlystop = EarlyStopping(monitor='val_acc', min_delta=0.0001, patience=5,
+                              verbose=1, mode='auto')
 
-callbacks_list = [earlystop]
+    callbacks_list = [earlystop]
 
-# Compile neural network
-classifier.compile(loss='binary_crossentropy', # Cross-entropy
-                   optimizer='adam',
-                   metrics=['accuracy']) # Accuracy performance metric
+    # Compile neural network
+    classifier.compile(loss='binary_crossentropy',  # Cross-entropy
+                       optimizer='adam',
+                       metrics=['accuracy'])  # Accuracy performance metric
 
-# train the model
-start = time.time()
+    # train the model
+    start = time.time()
+    ISOTIMEFORMAT = '%Y-%m-%d-%X'
+    current_time = time.strftime(ISOTIMEFORMAT, time.localtime(time.time()))
+    model_info = classifier.fit(X_train, y_train, verbose=1,
+                                validation_steps=0,
+                                validation_split=0.25,
+                                batch_size=16,
+                                callbacks=callbacks_list,
+                                epochs=30)
+    classifier.fit(X_train, y_train, verbose=1,
+                   validation_steps=0,
+                   validation_split=0.25,
+                   batch_size=16,
+                   callbacks=callbacks_list,
+                   epochs=30)
+    end = time.time()
+    if plot == 1:
+        plot_model_history(model_info)
 
-model_info = classifier.fit(X_train, y_train, verbose=1, \
-                            validation_steps = 0, \
-                            validation_split = 0.25, \
-                            batch_size = 16, \
-                            callbacks = callbacks_list,
-                            epochs = 30)
+    # compute test accuracy
+    print("Model took {0} seconds to train".format(end - start))
 
-end = time.time()
+    # compute test accuracy
+    score = classifier.evaluate(X_test, y_test)
+    print("Accuracy on test data is: {0}".format(score))
+    if save_file != '':
+        with open("Model_Score_All.txt", 'a') as new_file:
+            new_file.write(
+                str(current_time)+' '+str(save_file)+' parameters:'+' '+str(length)+' '+str(nb_filters)+' '
+                + str(kernel_size)+' '+str(pool_size)+ '  score:'+str(score)+'\n')
+        classifier.save("{0}.h5".format(save_file))
 
-import matplotlib.pyplot as plt
+    # y_pred = classifier.predict(X_test)
+    # rounded = [round(val[1]) for val in y_pred]
 
-plot_model_history(model_info)
+    # print(y_pred[:500,:])
+    # print(rounded[:500])
 
-# compute test accuracy
-print("Model took {0} seconds to train".format(end - start))
 
-# compute test accuracy
-print("Accuracy on test data is: {0}".format(classifier.evaluate(X_test, y_test)))
-classifier.save("CNN_Ecoli_Promoter.h5")
+for p in range(2, 251-13+2, 4):
+    train_network('Mouse_prom_n20000', 'Random_Exon_Mouse_Cat251_n20000',
+                  200, 13, 251, p, 'Mouse_Prom_Exon', 0)
 
-y_pred = classifier.predict(X_test)
-rounded = [round(val[1]) for val in y_pred]
 
-print(y_pred[:10,:])
-print(rounded[:10])
+
