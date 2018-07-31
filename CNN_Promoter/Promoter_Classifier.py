@@ -168,9 +168,9 @@ def train_network(prom, nonprom, nb_filters, kernel_size, length, pool_size, sav
     # print(rounded[:500])
 
 
-for p in range(2, 251-13+2, 4):
-    train_network('Mouse_prom_n20000', 'Random_Exon_Mouse_Cat251_n20000',
-                  200, 13, 251, p, 'Mouse_Prom_Exon', 0)
+# for p in range(2, 251-13+2, 4):
+train_network('Mouse_prom_n20000', 'Random_Exon_Mouse_Cat251_n20000',
+              250, 13, 251, 2, 'Mouse_Prom_Exon', 0)
 
 
 
